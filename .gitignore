@@ -18,3 +18,4 @@ htmlcov/
 .DS_Store
 alembic/versions/*.pyc
 .dockerignore
+redis/__pycache__

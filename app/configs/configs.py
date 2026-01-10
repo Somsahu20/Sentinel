@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     db_name: str
     db_host: str
     db_user: str
+    redis_host: str
 
     model_config = SettingsConfigDict(env_file=str(ENV_PATH), case_sensitive=False, env_file_encoding='utf-8')
 

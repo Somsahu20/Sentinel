@@ -1,0 +1,50 @@
+services:
+  redis-db:
+    image: redis:alpine
+    container_name: sentinel-redis
+    ports:
+      - "6379:6379"
+
+
+  #todo Postgres database
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432" 
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  #python code
+  sentinel-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinel-app
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis-db
+      - postgres-db
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  worker-alice:
+    build: .
+    container_name: worker-alice
+    env_file:
+      - .env
+    depends_on:
+      - redis-db
+    volumes:
+      - .:/app
+    # Alice runs the worker script instead of uvicorn
+    command: python -m app.workers.alice
+
+volumes:
+  postgres_data:
