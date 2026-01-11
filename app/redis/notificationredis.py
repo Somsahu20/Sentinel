@@ -1,8 +1,16 @@
 import redis as rd
 from ..db.notifications import NotificationResponse
+from ..db.sessions import (
+    SyncSessionLocal
+)
+
 import os
 import logging #! to log info to docker 
 import time
+from sqlalchemy import select
+from ..models.notifications import Notification, Status
+from starlette.status import HTTP_404_NOT_FOUND
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SentinelRedis")
@@ -14,10 +22,20 @@ GROUP = "manager"
 
 TESTGRP = "Alice"
 
+payload = {
+    "id": "1",
+    "user_id": "1",
+    "content": "Post created notification 3",
+    "recipient": "+91-6789678978",
+    "status": "PENDING",
+    "type": "SMS"
+    # We excluded created_at/updated_at as requested
+}
+
 def setup_redis():
 
     try:
-        r.xgroup_create(QUEUE, GROUP, id="$", mkstream=True)
+        r.xgroup_create(QUEUE, TESTGRP, id="$", mkstream=True)
         logger.info("Group created")
     except Exception as err:
 
@@ -72,22 +90,41 @@ def process_each__task(task) -> bool:
 
 def ack_del(task) -> bool:
 
+    sync_db = SyncSessionLocal() #! ALways close when you get connection of db like this
+
     try:
         id, task_dict = task
+
+        db_id = task_dict.get("id")
+        stmt = select(Notification).where(Notification.id == db_id)
+        res = sync_db.execute(stmt).scalar_one_or_none()
+
+        if not res:
+            logger.error("No such task with this id")
+            return False
+
         if process_each__task(task):
-            r.xack(QUEUE, GROUP, id)
+    
+            r.xack(QUEUE, TESTGRP, id)
             r.xdel(QUEUE, id)
-            if "status" in task_dict:
-                task_dict["status"] = "sent" #todo change it to enum type sent
+            res.status = Status.SENT #todo change it to enum type sent    
+            sync_db.commit()
+            sync_db.refresh(res)
+                
             return True
         else:
-            if "status" in task_dict:
-                task_dict["status"] = "failed" #todo change it to enum type failed
+            res.status = Status.FAILED #todo change it to enum type failed
+            sync_db.commit()
+            sync_db.refresh(res)
+
             return False
 
     except Exception as err:
         logger.info(f"Error in acknowledging and deleting the task")
+        sync_db.rollback()
         return False
+    finally:
+        sync_db.close()
     
 def assign_pending_task(worker, start):
 
@@ -112,5 +149,38 @@ def assign_pending_task(worker, start):
         return "0-0"
 
     
-    
+if __name__ == "__main__":
+    print("🧪 Starting Local Test for ack_del...")
+
+    # 1. Mock the Redis Stream ID (Fake ID)
+    # We use a dummy ID because we just want to test the DB update logic.
+    # Note: This will fail at r.xack() if Redis isn't running, but the DB update happens BEFORE that.
+    mock_stream_id = "1736432499000-0"
+
+    # 2. Mock the Task Payload
+    # EXACT MATCH from your screenshot (ID=1)
+    mock_payload = task = (
+        "1705332200000-0",  # The 'id' (Redis Stream ID)
+        {
+            "id": 1,  # The 'db_id' (Matches your Postgres Row ID)
+            "content": "Post created notification 3",
+            "recipient": "+91-6789678978",
+            "status": "PENDING",
+            "type": "SMS"
+        }
+    )
+
+    # 3. Create the Tuple (Redis format)
+    ack_del(task)
+
+    try:
+        success = ack_del(task)
+        
+        if success:
+            print("\n✅ TEST PASSED: check your Database!")
+        else:
+            print("\n❌ TEST FAILED: The function returned False.")
+            
+    except Exception as e:
+        print(f"\n💥 CRASH: {e}")
     
