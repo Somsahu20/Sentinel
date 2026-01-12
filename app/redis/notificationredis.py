@@ -107,6 +107,8 @@ def ack_del(task) -> bool:
     
             r.xack(QUEUE, TESTGRP, id)
             r.xdel(QUEUE, id)
+            if res.status == Status.FAILED:
+                res.retry_cnt += 1
             res.status = Status.SENT #todo change it to enum type sent    
             sync_db.commit()
             sync_db.refresh(res)
@@ -122,9 +124,32 @@ def ack_del(task) -> bool:
     except Exception as err:
         logger.info(f"Error in acknowledging and deleting the task")
         sync_db.rollback()
+        sync_db.close()
         return False
     finally:
         sync_db.close()
     
+
+def assign_pending_task(worker, start):
+
+    try:
+        res = r.xpending(QUEUE, GROUP)
+        if res['pending'] > 0: #type:ignore
+            claim = r.xautoclaim(QUEUE, GROUP, worker, 60000, start_id=start, count=3)
+
+            new_start = claim[0] #type: ignore
+            rem_task = claim[1] #type: ignore
+
+            if rem_task:
+                for task in rem_task:
+                    ack_del(task=task)
+
+            return new_start
+        else: #! it means no pending lists so return "0-0"
+            return "0-0"
+
+    except Exception as err:
+        logger.info(f"Error in functiom assign pending tasks\n {err}")
+        return "0-0"
 
     
