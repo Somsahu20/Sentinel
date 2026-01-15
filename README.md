@@ -49,7 +49,7 @@ Sentinel Project/
 
 1. **Clone the repository**:
    ```bash
-   git clone 
+   git clone https://github.com/Somsahu20/Sentinel.git
    cd Sentinel
    ```
 
