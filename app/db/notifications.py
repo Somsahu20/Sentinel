@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Literal, Annotated, Union
-from ..models.notifications import Status
+from ..models.notifications import Status, Channel
 from datetime import datetime as dt
 
 
@@ -22,6 +22,7 @@ class NotificationResponse(BaseModel):
     body: str 
     recipient: str
     status: Status
+    channel: Channel
     retry_cnt: int
     created_at: dt
     updated_at: dt

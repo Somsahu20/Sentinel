@@ -153,7 +153,7 @@ def ack_del(task) -> bool:
     try:
         id, task_dict = task
 
-        db_id = task_dict.get("id")
+        db_id = int(task_dict.get("id"))
         stmt = select(Notification).where(Notification.id == db_id)
         res = sync_db.execute(stmt).scalar_one_or_none()
 
