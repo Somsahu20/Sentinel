@@ -7,6 +7,7 @@ from ..models.notifications import Notification
 from sqlalchemy import select
 from typing import List
 from pydantic import ValidationError
+from ..redis.notificationredis import push_to_queue, logger
 
 router = APIRouter()
 
@@ -36,7 +37,15 @@ async def send_notification(res: Response, notif: NotificationSend, db: AsyncSes
         db.add(noti_send)
         await db.commit()
         await db.refresh(noti_send)
+
+        try:
+            pydantic_obj = NotificationResponse.model_validate(noti_send)
+            push_to_queue(pydantic_obj)
+        except Exception as err:
+            logger.error(f"there is an error {err}")
+
         res.status_code = HTTP_201_CREATED
+        
         return noti_send
     
     except ValidationError:

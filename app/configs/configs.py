@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     sid: str
     authtoken: str
     phone: str
+    send_grid_api: str
+    email: str
 
     model_config = SettingsConfigDict(env_file=str(ENV_PATH), case_sensitive=False, env_file_encoding='utf-8')
 
