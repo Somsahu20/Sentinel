@@ -6,10 +6,16 @@ from ..db.sessions import (
 
 import os
 import logging #! to log info to docker 
-import time
+from fastapi import HTTPException
 from sqlalchemy import select
 from ..models.notifications import Notification, Status
 from starlette.status import HTTP_404_NOT_FOUND
+from twilio.rest import Client
+
+acccount_sid = os.getenv("SID")
+auth_token = os.getenv("AUTHTOKEN")
+phone_num = os.getenv("PHONE")
+client = Client(acccount_sid, auth_token)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -22,15 +28,7 @@ GROUP = "manager"
 
 TESTGRP = "Alice"
 
-payload = {
-    "id": "1",
-    "user_id": "1",
-    "content": "Post created notification 3",
-    "recipient": "+91-6789678978",
-    "status": "PENDING",
-    "type": "SMS"
-    # We excluded created_at/updated_at as requested
-}
+
 
 def setup_redis():
 
@@ -61,7 +59,7 @@ def push_to_queue(n: NotificationResponse):
 def read_tasks(worker):
 
     try:
-        res2 = r.xreadgroup(GROUP, worker, streams={QUEUE: ">"}, count=2, block=5000)
+        res2 = r.xreadgroup(TESTGRP, worker, streams={QUEUE: ">"}, count=2, block=5000)
         if res2:
             stream, li = res2[0] #type: ignore 
             return li
@@ -77,7 +75,20 @@ def process_each__task(task) -> bool:
     try:
         id, task_dict = task
         #? Mimicking the api call for twilio to send SMS or use API to send mails
-        time.sleep(3)
+        # time.sleep(3)
+    
+        txt_message = task_dict.get("body")
+        recepient = task_dict.get("recipient")
+
+        if txt_message and recepient:
+            message = client.messages.create(
+                body=txt_message,
+                from_=phone_num,
+                to=recepient
+            )
+        else:
+            logger.error("Missing key value pair in payload")
+            return False
     
 
         #todo here after all logic is written, we'll apply twilio logic here to send sms and check for phone number or passsword
@@ -122,7 +133,7 @@ def ack_del(task) -> bool:
             return False
 
     except Exception as err:
-        logger.info(f"Error in acknowledging and deleting the task")
+        logger.info(f"Error in acknowledging and deleting the task\n", err)
         sync_db.rollback()
         sync_db.close()
         return False
@@ -133,9 +144,9 @@ def ack_del(task) -> bool:
 def assign_pending_task(worker, start):
 
     try:
-        res = r.xpending(QUEUE, GROUP)
+        res = r.xpending(QUEUE, TESTGRP)
         if res['pending'] > 0: #type:ignore
-            claim = r.xautoclaim(QUEUE, GROUP, worker, 60000, start_id=start, count=3)
+            claim = r.xautoclaim(QUEUE, TESTGRP, worker, 60000, start_id=start, count=3)
 
             new_start = claim[0] #type: ignore
             rem_task = claim[1] #type: ignore

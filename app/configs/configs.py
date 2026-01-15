@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     db_host: str
     db_user: str
     redis_host: str
+    sid: str
+    authtoken: str
+    phone: str
 
     model_config = SettingsConfigDict(env_file=str(ENV_PATH), case_sensitive=False, env_file_encoding='utf-8')
 
